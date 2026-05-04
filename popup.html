@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rental Compare</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>Rental Compare</h1>
+        <p id="siteLabel">Checking current page...</p>
+      </header>
+
+      <section class="controls" aria-label="Actions">
+        <button id="candidateBtn" type="button">Find unit candidates</button>
+        <button id="selectedBtn" type="button" disabled>Extract selected units</button>
+        <button id="extractBtn" type="button">Extract all visible</button>
+        <button id="detailBtn" type="button" disabled>Extract selected with details</button>
+        <button id="saveBtn" type="button" disabled>Save results</button>
+        <button id="showSavedBtn" type="button">Show saved</button>
+        <button id="walkBtn" type="button" disabled>Calc walk time</button>
+        <button id="csvBtn" type="button" disabled>Copy Google table</button>
+        <button id="jsonBtn" type="button" disabled>Copy full JSON</button>
+        <button id="clearBtn" type="button">Clear saved</button>
+      </section>
+
+      <section class="candidate-filters" aria-label="Candidate filters">
+        <input id="candidateTextFilter" type="search" placeholder="Address, name, keyword">
+        <input id="maxRentFilter" type="number" min="0" step="50" placeholder="Max rent">
+        <select id="minBedsFilter">
+          <option value="">Any beds</option>
+          <option value="0">Studio+</option>
+          <option value="1">1 bed+</option>
+          <option value="2">2 bed+</option>
+          <option value="3">3 bed+</option>
+          <option value="4">4 bed+</option>
+        </select>
+        <button id="clearFiltersBtn" type="button">Clear filters</button>
+      </section>
+
+      <section class="status" aria-live="polite">
+        <div id="statusText">Ready</div>
+        <progress id="progressBar" max="100" value="0" hidden></progress>
+      </section>
+
+      <section class="summary">
+        <span id="candidateCount">Candidates 0</span>
+        <span id="filteredCount">Filtered 0</span>
+        <span id="rowCount">Rows 0</span>
+        <span id="savedCount">Saved 0</span>
+      </section>
+
+      <section class="candidate-wrap" aria-label="Unit candidates">
+        <div class="candidate-toolbar">
+          <button id="selectAllBtn" type="button" disabled>Select all</button>
+          <button id="selectNoneBtn" type="button" disabled>Select none</button>
+          <button id="mapBtn" type="button" disabled>Open map</button>
+        </div>
+        <div id="candidateList" class="candidate-list">
+          <div class="empty">No candidates yet.</div>
+        </div>
+      </section>
+
+      <section class="table-wrap" aria-label="Extracted results preview">
+        <table>
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>면적</th>
+              <th>월세</th>
+              <th>유틸리티 포함(전기 제외)</th>
+              <th>세탁기</th>
+              <th>잭슨 거리</th>
+              <th>특징</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr>
+              <td colspan="7" class="empty">No extracted results yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+    <script src="src/utils/cleaning.js"></script>
+    <script src="src/utils/csv.js"></script>
+    <script src="src/utils/storage.js"></script>
+    <script src="src/extractors/eastRock.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

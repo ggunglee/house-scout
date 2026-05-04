@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Rental Compare",
+  "version": "0.1.0",
+  "description": "사용자가 직접 연 임대 아파트 페이지에서 매물 정보를 추출해 비교표로 보여줍니다.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Rental Compare"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.zillow.com/*",
+    "https://www.apartments.com/*",
+    "https://trumbullenterprises.com/*",
+    "https://*.appfolio.com/*",
+    "https://*.appf.io/*",
+    "https://eastrockrealestate.com/*",
+    "https://*.eastrockrealestate.com/*",
+    "https://nominatim.openstreetmap.org/*",
+    "https://tile.openstreetmap.org/*",
+    "https://*.basemaps.cartocdn.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://nominatim.openstreetmap.org https://www.zillow.com https://www.apartments.com https://trumbullenterprises.com https://*.appfolio.com https://*.appf.io https://eastrockrealestate.com https://*.eastrockrealestate.com; img-src 'self' data: https://tile.openstreetmap.org https://*.basemaps.cartocdn.com;"
+  }
+}
