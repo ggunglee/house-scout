@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Rental Compare",
-  "version": "0.1.0",
+  "version": "2026.5.4.1",
+  "version_name": "2026.05.04-1",
   "description": "사용자가 직접 연 임대 아파트 페이지에서 매물 정보를 추출해 비교표로 보여줍니다.",
   "action": {
     "default_popup": "popup.html",

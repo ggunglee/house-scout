@@ -37,6 +37,9 @@ The personal `문의 여부` column is not exported.
 
 ## Packaging
 
+Chrome extension versions use the date-based format `YYYY.M.D.N`.
+For example, `2026.5.4.1` means the first build on 2026-05-04.
+
 Run:
 
 ```powershell
