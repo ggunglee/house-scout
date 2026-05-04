@@ -103,7 +103,7 @@
       row.appliances,
       row.description
     ].filter(Boolean).join(" ")).toLowerCase();
-    if (/no laundry|laundry not available|no washer|no dryer/.test(source)) return null;
+    if (/no laundry|laundry not available|no washer|no dryer/.test(source)) return "없음";
     if (/in[-\s]?unit|in unit|washer.?dryer|washer and dryer|w\/d|laundry in unit/.test(source)) return "O";
     if (/laundry|washer|dryer/.test(source) && /shared|common|community|on[-\s]?site|onsite|coin|card|laundry room|building|basement/.test(source)) return "X";
     if (/laundry|washer|dryer/.test(source)) return "?";
@@ -126,7 +126,6 @@
 
   function formatSheetRow(row) {
     const laundry = laundryStatus(row);
-    if (laundry == null) return null;
     return {
       name: compact(row.name || row.title || row.address),
       area: areaText(row),

@@ -16,8 +16,8 @@
       lon: -72.9301032
     }
   ];
-  const WALK_SPEED_KMH = 4.8;
-  const WALK_ROUTE_FACTOR = 1.25;
+  const WALK_SPEED_KMH = 4.4;
+  const WALK_SIGNAL_BUFFER_MINUTES = 1.5;
   const SCRIPT_FILES = [
     "src/utils/cleaning.js",
     "src/extractors/generic.js",
@@ -214,6 +214,26 @@
     return radiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
+  function gridWalkKm(from, to) {
+    const radiusKm = 6371;
+    const lat1 = from.lat * Math.PI / 180;
+    const lat2 = to.lat * Math.PI / 180;
+    const dLat = Math.abs((to.lat - from.lat) * Math.PI / 180);
+    const dLon = Math.abs((to.lon - from.lon) * Math.PI / 180);
+    const northSouthKm = radiusKm * dLat;
+    const eastWestKm = radiusKm * Math.cos((lat1 + lat2) / 2) * dLon;
+    return northSouthKm + eastWestKm;
+  }
+
+  function estimatedWalkMinutes(from, to) {
+    const directKm = haversineKm(from, to);
+    const gridKm = gridWalkKm(from, to);
+    const routeKm = Math.max(directKm * 1.35, gridKm * 0.92);
+    const movingMinutes = (routeKm / WALK_SPEED_KMH) * 60;
+    const crossingBuffer = Math.min(4, Math.max(1, routeKm * WALK_SIGNAL_BUFFER_MINUTES));
+    return Math.round(movingMinutes + crossingBuffer);
+  }
+
   function walkTimeText(minutes) {
     if (!Number.isFinite(minutes)) return "";
     if (minutes < 60) return `${Math.max(1, Math.round(minutes))} min`;
@@ -251,8 +271,7 @@
 
         if (point) {
           for (const origin of WALK_ORIGINS) {
-            const distanceKm = haversineKm(origin, point) * WALK_ROUTE_FACTOR;
-            const minutes = Math.round((distanceKm / WALK_SPEED_KMH) * 60);
+            const minutes = estimatedWalkMinutes(origin, point);
             row[`${origin.key}Minutes`] = minutes;
             row[origin.key] = walkTimeText(minutes);
           }
@@ -281,12 +300,6 @@
       setBusy(false);
       return;
     }
-    if (!sheetRows.length) {
-      els.resultsBody.innerHTML = '<tr><td colspan="7" class="empty">세탁 시설이 없는 항목은 제외되었습니다.</td></tr>';
-      setBusy(false);
-      return;
-    }
-
     els.resultsBody.textContent = "";
     for (const row of sheetRows) {
       const tr = document.createElement("tr");
@@ -569,10 +582,6 @@
       return;
     }
     const sheetRows = RC.rowsToSheetRows ? RC.rowsToSheetRows(rows) : rows;
-    if (!sheetRows.length) {
-      setStatus("복사할 행이 없습니다. 세탁 시설이 없는 항목은 제외됩니다.", true);
-      return;
-    }
     await navigator.clipboard.writeText(RC.rowsToTsv(rows));
     setStatus(`${sheetRows.length}개 행을 구글 문서/시트에 붙여넣기 좋은 표 형식으로 복사했습니다.`);
   });

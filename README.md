@@ -23,7 +23,7 @@ Laundry is normalized as:
 
 - `O`: in-unit laundry or washer/dryer
 - `X`: shared, common, on-site, or building laundry
-- excluded: rows that explicitly say there is no laundry
+- `없음`: rows that explicitly say there is no laundry
 
 The personal `문의 여부` column is not exported.
 
