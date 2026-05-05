@@ -296,14 +296,14 @@
     els.rowCount.textContent = `결과 ${state.rows.length}개`;
     const sheetRows = RC.rowsToSheetRows ? RC.rowsToSheetRows(state.rows) : state.rows;
     if (!state.rows.length) {
-      els.resultsBody.innerHTML = '<tr><td colspan="7" class="empty">아직 표시할 결과가 없습니다.</td></tr>';
+      els.resultsBody.innerHTML = '<tr><td colspan="8" class="empty">아직 표시할 결과가 없습니다.</td></tr>';
       setBusy(false);
       return;
     }
     els.resultsBody.textContent = "";
     for (const row of sheetRows) {
       const tr = document.createElement("tr");
-      [row.name, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features]
+      [row.name, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features, row.details]
         .forEach((value) => {
           const td = document.createElement("td");
           td.textContent = formatValue(value);
@@ -378,6 +378,9 @@
     if (!response.ok) throw new Error(`AppFolio 목록을 가져오지 못했습니다. HTTP ${response.status}`);
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
+    const base = doc.createElement("base");
+    base.href = url;
+    doc.head.prepend(base);
     const rows = RC.extractEastRockCandidates(doc).map((row) => Object.assign(row, {
       pageUrl: url,
       raw: Object.assign({}, row.raw || {}, { embeddedSource: url })
@@ -501,27 +504,25 @@
     return state.rows;
   }
 
-  function serializableValue(value, depth) {
-    if (value == null || ["string", "number", "boolean"].includes(typeof value)) return value;
-    if (Array.isArray(value)) {
-      return value.map((item) => serializableValue(item, (depth || 0) + 1)).filter((item) => item !== undefined);
-    }
-    if (typeof value !== "object" || (depth || 0) > 2) return undefined;
-
-    const output = {};
-    for (const [key, child] of Object.entries(value)) {
-      const serialized = serializableValue(child, (depth || 0) + 1);
-      if (serialized !== undefined) output[key] = serialized;
-    }
-    return output;
-  }
-
   function mapCandidate(candidate, index) {
+    const fields = [
+      "id", "site", "sourceType", "candidateId", "candidateLabel", "candidateType", "displayNumber",
+      "name", "title", "address", "location", "unitSize", "rent", "rentText", "minRent", "maxRent",
+      "beds", "baths", "sqft", "area", "available", "utilitiesIncluded", "utilities", "laundry",
+      "amenities", "appliances", "parking", "pets", "description", "imageUrl", "detailUrl", "pageUrl",
+      "latitude", "longitude", "lat", "lon", "lng", "phone", "applicationFee", "capturedAt"
+    ];
     const output = {};
-    for (const [key, value] of Object.entries(candidate || {})) {
-      if (key === "raw") continue;
-      const serialized = serializableValue(value, 0);
-      if (serialized !== undefined) output[key] = serialized;
+    for (const key of fields) {
+      const value = candidate[key];
+      if (value == null) continue;
+      if (["string", "number", "boolean"].includes(typeof value)) {
+        output[key] = value;
+      } else if (Array.isArray(value)) {
+        output[key] = value
+          .filter((item) => item != null && ["string", "number", "boolean"].includes(typeof item))
+          .slice(0, 40);
+      }
     }
 
     return Object.assign(output, {
@@ -541,16 +542,20 @@
       return;
     }
 
-    await chrome.storage.local.set({
-      mapCandidates: candidates,
-      mapSourceTabId: state.tabId,
-      mapSourceSite: state.site,
-      mapCanUseDetails: state.canUseDetails,
-      mapSelectedCandidateIds: candidates.map((candidate) => candidate.candidateId),
-      mapCreatedAt: new Date().toISOString()
-    });
-    await chrome.tabs.create({ url: chrome.runtime.getURL("map.html") });
-    setStatus(`${candidates.length}개 후보를 지도에 보냈습니다.`);
+    try {
+      await chrome.storage.local.set({
+        mapCandidates: candidates,
+        mapSourceTabId: state.tabId,
+        mapSourceSite: state.site,
+        mapCanUseDetails: state.canUseDetails,
+        mapSelectedCandidateIds: candidates.map((candidate) => candidate.candidateId),
+        mapCreatedAt: new Date().toISOString()
+      });
+      await chrome.tabs.create({ url: chrome.runtime.getURL("map.html") });
+      setStatus(`${candidates.length}개 후보를 지도에 보냈습니다.`);
+    } catch (error) {
+      setStatus(error.message || String(error), true);
+    }
   }
 
   chrome.runtime.onMessage.addListener((message) => {

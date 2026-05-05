@@ -31,7 +31,8 @@
     { key: "utilities", label: "유틸리티 포함(전기 제외)" },
     { key: "laundry", label: "세탁기" },
     { key: "fromJackson", label: "잭슨 거리" },
-    { key: "features", label: "특징" }
+    { key: "features", label: "특징" },
+    { key: "details", label: "Details" }
   ];
 
   function csvEscape(value) {
@@ -124,6 +125,18 @@
     return "";
   }
 
+  function detailsUrl(row) {
+    const direct = compact(row.detailUrl || row.url);
+    if (direct && !direct.startsWith("chrome-extension://")) return direct;
+
+    const listingPath = direct.match(/\/listings\/detail\/[^/?#]+/);
+    const pageUrl = compact(row.pageUrl);
+    if (listingPath && /^https:\/\/[^/]*(?:appfolio\.com|appf\.io)\/listings\b/.test(pageUrl)) {
+      return new URL(listingPath[0], pageUrl).href;
+    }
+    return direct || pageUrl;
+  }
+
   function formatSheetRow(row) {
     const laundry = laundryStatus(row);
     return {
@@ -133,7 +146,8 @@
       utilities: utilitiesText(row),
       laundry,
       fromJackson: jacksonText(row),
-      features: featuresText(row)
+      features: featuresText(row),
+      details: detailsUrl(row)
     };
   }
 

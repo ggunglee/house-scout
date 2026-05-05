@@ -22,13 +22,19 @@
     return null;
   }
 
+  function baseUrlFor(doc) {
+    const base = doc && doc.querySelector && doc.querySelector("base[href]");
+    return (base && base.href) || (doc && doc.baseURI && doc.baseURI !== "about:blank" ? doc.baseURI : location.href);
+  }
+
   function extractEastRockListings(doc) {
     const items = Array.from(doc.querySelectorAll(".js-listing-item"));
+    const baseUrl = baseUrlFor(doc);
     return items.map((card, index) => {
       const pairs = getDetailPairs(card);
       const titleLink = card.querySelector(".js-listing-title a") || card.querySelector(".js-link-to-detail") || card.querySelector("a[href]");
       const title = RC.cleanText(titleLink && titleLink.textContent) || RC.textFromSelectors(card, [".js-listing-title"]);
-      const detailUrl = RC.absolutizeUrl(titleLink && titleLink.getAttribute("href"));
+      const detailUrl = RC.absolutizeUrl(titleLink && titleLink.getAttribute("href"), baseUrl);
       const address = RC.textFromSelectors(card, [".js-listing-address"]);
       const rentText = valueFor(pairs, ["rent"]);
       const sqftText = valueFor(pairs, ["square", "sq"]);
@@ -37,7 +43,8 @@
       const fullText = [card.innerText, card.textContent].filter(Boolean).join("\n");
       const imageNode = card.querySelector(".js-listing-image");
       const imageUrl = RC.absolutizeUrl(
-        imageNode && (imageNode.getAttribute("data-original") || imageNode.getAttribute("src") || imageNode.style.backgroundImage.replace(/^url\(["']?|["']?\)$/g, ""))
+        imageNode && (imageNode.getAttribute("data-original") || imageNode.getAttribute("src") || imageNode.style.backgroundImage.replace(/^url\(["']?|["']?\)$/g, "")),
+        baseUrl
       );
 
       return RC.makeRow({

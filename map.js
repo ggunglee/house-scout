@@ -89,7 +89,7 @@
     els.rowCount.textContent = `Rows ${state.rows.length}`;
     const sheetRows = RC.rowsToSheetRows ? RC.rowsToSheetRows(state.rows) : state.rows;
     if (!state.rows.length) {
-      els.resultsBody.innerHTML = '<tr><td colspan="7" class="empty">No extracted results yet.</td></tr>';
+      els.resultsBody.innerHTML = '<tr><td colspan="8" class="empty">No extracted results yet.</td></tr>';
       setBusy(false);
       return;
     }
@@ -97,7 +97,7 @@
     els.resultsBody.textContent = "";
     for (const row of sheetRows) {
       const tr = document.createElement("tr");
-      [row.name, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features]
+      [row.name, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features, row.details]
         .forEach((value) => {
           const td = document.createElement("td");
           td.textContent = formatValue(value);
