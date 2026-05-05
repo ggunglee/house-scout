@@ -14,6 +14,8 @@
           <p id="mapStatus">Loading candidates...</p>
         </div>
         <div class="map-actions">
+          <button id="extractBtn" type="button">Extract selected</button>
+          <button id="detailBtn" type="button">Extract details</button>
           <button id="fitBtn" type="button">Fit</button>
           <button id="zoomOutBtn" type="button">-</button>
           <button id="zoomInBtn" type="button">+</button>
@@ -25,10 +27,59 @@
           <a class="attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap, CARTO</a>
         </div>
         <aside class="candidate-panel">
+          <div class="candidate-panel-header">
+            <strong id="selectionCount">Selected 0</strong>
+            <div>
+              <button id="selectAllBtn" type="button">All</button>
+              <button id="selectNoneBtn" type="button">None</button>
+            </div>
+          </div>
           <ol id="candidateList" class="numbered-list"></ol>
         </aside>
       </section>
+
+      <section class="results-panel" aria-label="Extracted results preview">
+        <div class="results-header">
+          <div>
+            <h2>Results preview</h2>
+            <p>
+              <span id="rowCount">Rows 0</span>
+              <span id="savedCount">Saved 0</span>
+            </p>
+          </div>
+          <div class="results-actions">
+            <button id="saveBtn" type="button" disabled>Save results</button>
+            <button id="showSavedBtn" type="button">Show saved</button>
+            <button id="copyBtn" type="button" disabled>Copy Google table</button>
+            <button id="jsonBtn" type="button" disabled>Copy full JSON</button>
+            <button id="clearBtn" type="button">Clear saved</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Area</th>
+                <th>Rent</th>
+                <th>Utilities</th>
+                <th>Laundry</th>
+                <th>From Jackson</th>
+                <th>Features</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <tr>
+                <td colspan="7" class="empty">No extracted results yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
+    <script src="src/utils/cleaning.js"></script>
+    <script src="src/utils/csv.js"></script>
+    <script src="src/utils/storage.js"></script>
     <script src="map.js"></script>
   </body>
 </html>

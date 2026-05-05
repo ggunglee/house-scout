@@ -501,20 +501,37 @@
     return state.rows;
   }
 
+  function serializableValue(value, depth) {
+    if (value == null || ["string", "number", "boolean"].includes(typeof value)) return value;
+    if (Array.isArray(value)) {
+      return value.map((item) => serializableValue(item, (depth || 0) + 1)).filter((item) => item !== undefined);
+    }
+    if (typeof value !== "object" || (depth || 0) > 2) return undefined;
+
+    const output = {};
+    for (const [key, child] of Object.entries(value)) {
+      const serialized = serializableValue(child, (depth || 0) + 1);
+      if (serialized !== undefined) output[key] = serialized;
+    }
+    return output;
+  }
+
   function mapCandidate(candidate, index) {
-    return {
+    const output = {};
+    for (const [key, value] of Object.entries(candidate || {})) {
+      if (key === "raw") continue;
+      const serialized = serializableValue(value, 0);
+      if (serialized !== undefined) output[key] = serialized;
+    }
+
+    return Object.assign(output, {
       candidateId: candidate.candidateId,
       displayNumber: candidate.displayNumber || index + 1,
       candidateLabel: candidate.candidateLabel,
-      title: candidate.title,
-      name: candidate.name,
-      address: candidate.address,
-      location: candidate.location,
-      unitSize: candidate.unitSize,
       rentText: candidate.rentText || candidate.rent,
       lat: candidate.lat || candidate.latitude,
       lon: candidate.lon || candidate.lng || candidate.longitude
-    };
+    });
   }
 
   async function openCandidateMap() {
@@ -526,6 +543,10 @@
 
     await chrome.storage.local.set({
       mapCandidates: candidates,
+      mapSourceTabId: state.tabId,
+      mapSourceSite: state.site,
+      mapCanUseDetails: state.canUseDetails,
+      mapSelectedCandidateIds: candidates.map((candidate) => candidate.candidateId),
       mapCreatedAt: new Date().toISOString()
     });
     await chrome.tabs.create({ url: chrome.runtime.getURL("map.html") });

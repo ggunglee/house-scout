@@ -10,13 +10,41 @@
     map: document.getElementById("map"),
     status: document.getElementById("mapStatus"),
     list: document.getElementById("candidateList"),
+    selectionCount: document.getElementById("selectionCount"),
+    selectAllBtn: document.getElementById("selectAllBtn"),
+    selectNoneBtn: document.getElementById("selectNoneBtn"),
+    extractBtn: document.getElementById("extractBtn"),
+    detailBtn: document.getElementById("detailBtn"),
+    saveBtn: document.getElementById("saveBtn"),
+    showSavedBtn: document.getElementById("showSavedBtn"),
+    copyBtn: document.getElementById("copyBtn"),
+    jsonBtn: document.getElementById("jsonBtn"),
+    clearBtn: document.getElementById("clearBtn"),
+    rowCount: document.getElementById("rowCount"),
+    savedCount: document.getElementById("savedCount"),
+    resultsBody: document.getElementById("resultsBody"),
     fitBtn: document.getElementById("fitBtn"),
     zoomInBtn: document.getElementById("zoomInBtn"),
     zoomOutBtn: document.getElementById("zoomOutBtn")
   };
+  const RC = window.RentalCompare || {};
+  const SCRIPT_FILES = [
+    "src/utils/cleaning.js",
+    "src/extractors/generic.js",
+    "src/extractors/zillow.js",
+    "src/extractors/apartments.js",
+    "src/extractors/eastRock.js",
+    "src/extractors/hadley.js",
+    "content.js"
+  ];
 
   const state = {
     candidates: [],
+    selectedIds: new Set(),
+    rows: [],
+    sourceTabId: null,
+    canUseDetails: false,
+    savedRowsCount: 0,
     center: DEFAULT_CENTER,
     zoom: 13,
     isDragging: false,
@@ -28,6 +56,220 @@
   function setStatus(text, isError) {
     els.status.textContent = text;
     els.status.style.color = isError ? "var(--warn)" : "";
+  }
+
+  function setBusy(isBusy) {
+    const selectedCount = state.selectedIds.size;
+    els.extractBtn.disabled = isBusy || !selectedCount;
+    els.detailBtn.disabled = isBusy || !selectedCount || !state.sourceTabId || !state.canUseDetails;
+    els.saveBtn.disabled = isBusy || !state.rows.length;
+    els.copyBtn.disabled = isBusy || !state.rows.length;
+    els.jsonBtn.disabled = isBusy || !state.rows.length;
+    els.showSavedBtn.disabled = isBusy;
+    els.clearBtn.disabled = isBusy;
+    els.selectAllBtn.disabled = isBusy || !state.candidates.length;
+    els.selectNoneBtn.disabled = isBusy || !state.candidates.length;
+  }
+
+  function normalizeRowsForOutput(rows) {
+    return RC.normalizeRowsForOutput ? RC.normalizeRowsForOutput(rows) : (rows || []);
+  }
+
+  function selectedCandidates() {
+    return state.candidates.filter((candidate) => state.selectedIds.has(candidate.candidateId));
+  }
+
+  function formatValue(value) {
+    if (Array.isArray(value)) return value.join("; ");
+    if (value == null || value === "") return "";
+    return String(value);
+  }
+
+  function renderRows() {
+    els.rowCount.textContent = `Rows ${state.rows.length}`;
+    const sheetRows = RC.rowsToSheetRows ? RC.rowsToSheetRows(state.rows) : state.rows;
+    if (!state.rows.length) {
+      els.resultsBody.innerHTML = '<tr><td colspan="7" class="empty">No extracted results yet.</td></tr>';
+      setBusy(false);
+      return;
+    }
+
+    els.resultsBody.textContent = "";
+    for (const row of sheetRows) {
+      const tr = document.createElement("tr");
+      [row.name, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features]
+        .forEach((value) => {
+          const td = document.createElement("td");
+          td.textContent = formatValue(value);
+          td.title = formatValue(value);
+          tr.appendChild(td);
+        });
+      els.resultsBody.appendChild(tr);
+    }
+    setBusy(false);
+  }
+
+  async function refreshSavedCount() {
+    const saved = await RC.getSavedRows();
+    state.savedRowsCount = saved.length;
+    els.savedCount.textContent = `Saved ${saved.length}`;
+    return saved;
+  }
+
+  async function persistSelection() {
+    await chrome.storage.local.set({
+      mapSelectedCandidateIds: Array.from(state.selectedIds)
+    });
+  }
+
+  function updateSelectionCount() {
+    els.selectionCount.textContent = `Selected ${state.selectedIds.size}/${state.candidates.length}`;
+    setBusy(false);
+  }
+
+  async function toggleCandidate(candidateId, checked) {
+    if (checked) {
+      state.selectedIds.add(candidateId);
+    } else {
+      state.selectedIds.delete(candidateId);
+    }
+    state.rows = [];
+    renderRows();
+    await persistSelection();
+    renderMap();
+    renderList();
+  }
+
+  async function sendSourceMessage(message) {
+    if (!state.sourceTabId) throw new Error("The original listing tab was not recorded. Reopen the popup from the listing page and open the map again.");
+    await chrome.scripting.executeScript({ target: { tabId: state.sourceTabId }, files: SCRIPT_FILES });
+    return chrome.tabs.sendMessage(state.sourceTabId, message);
+  }
+
+  function fallbackRowsFromSelection() {
+    return selectedCandidates().map((candidate) => Object.assign({}, candidate, {
+      site: candidate.site || "map",
+      sourceType: candidate.candidateType || "candidate",
+      rent: candidate.rent || candidate.rentText,
+      pageUrl: candidate.pageUrl || candidate.detailUrl || ""
+    }));
+  }
+
+  function hasValue(value) {
+    return value != null && value !== "" && (!Array.isArray(value) || value.length > 0);
+  }
+
+  function mergeFilled(base, incoming) {
+    const output = Object.assign({}, base || {});
+    for (const [key, value] of Object.entries(incoming || {})) {
+      if (hasValue(value) || !hasValue(output[key])) output[key] = value;
+    }
+    return output;
+  }
+
+  function mergeRowsWithSelection(rows) {
+    const fallbackRows = fallbackRowsFromSelection();
+    if (!rows || !rows.length) return fallbackRows;
+
+    const fallbackById = new Map(fallbackRows.map((row) => [row.candidateId, row]));
+    const merged = rows.map((row) => mergeFilled(fallbackById.get(row.candidateId), row));
+    return RC.dedupeRows ? RC.dedupeRows(merged) : merged;
+  }
+
+  async function extractSelected(mode) {
+    const candidateIds = Array.from(state.selectedIds);
+    if (!candidateIds.length) {
+      setStatus("Select at least one candidate first.", true);
+      return;
+    }
+
+    setBusy(true);
+    setStatus(mode === "details" ? `Extracting details for ${candidateIds.length} selected candidates...` : `Extracting ${candidateIds.length} selected candidates...`);
+    try {
+      const response = await sendSourceMessage({ type: "EXTRACT_SELECTED", candidateIds, mode });
+      if (!response || !response.ok) throw new Error(response && response.error ? response.error : "Extraction failed.");
+      const rows = RC.dedupeRows ? RC.dedupeRows(response.rows || []) : (response.rows || []);
+      state.rows = normalizeRowsForOutput(mergeRowsWithSelection(rows));
+      renderRows();
+      setStatus(`Extracted ${state.rows.length} rows. You can save them or copy the table from this map tab.`);
+    } catch (error) {
+      if (mode === "basic") {
+        state.rows = normalizeRowsForOutput(fallbackRowsFromSelection());
+        renderRows();
+        setStatus(`Used the selected map candidates as ${state.rows.length} rows because the original tab could not be reached.`);
+      } else {
+        setStatus(error.message || String(error), true);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRows() {
+    setBusy(true);
+    try {
+      const saved = await RC.saveRows(state.rows);
+      state.savedRowsCount = saved.length;
+      els.savedCount.textContent = `Saved ${saved.length}`;
+      setStatus(`Saved ${state.rows.length} rows. Local storage now has ${saved.length} rows.`);
+    } catch (error) {
+      setStatus(error.message || String(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyRows() {
+    setBusy(true);
+    try {
+      await navigator.clipboard.writeText(RC.rowsToTsv ? RC.rowsToTsv(state.rows) : JSON.stringify(state.rows, null, 2));
+      setStatus(`Copied ${state.rows.length} rows.`);
+    } catch (error) {
+      setStatus(error.message || String(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyJson() {
+    setBusy(true);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(state.rows, null, 2));
+      setStatus(`Copied ${state.rows.length} full JSON rows.`);
+    } catch (error) {
+      setStatus(error.message || String(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function showSavedRows() {
+    setBusy(true);
+    try {
+      const saved = await refreshSavedCount();
+      state.rows = normalizeRowsForOutput(saved);
+      renderRows();
+      setStatus(`Showing ${saved.length} saved rows.`);
+    } catch (error) {
+      setStatus(error.message || String(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearSavedRows() {
+    setBusy(true);
+    try {
+      await RC.clearSavedRows();
+      state.rows = [];
+      renderRows();
+      await refreshSavedCount();
+      setStatus("Cleared saved rows.");
+    } catch (error) {
+      setStatus(error.message || String(error), true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function asNumber(value) {
@@ -145,7 +387,7 @@
     const point = project(candidate.lat, candidate.lon, state.zoom);
     const marker = document.createElement("button");
     marker.type = "button";
-    marker.className = `marker${state.activeCandidateNumber === candidate.number ? " active" : ""}`;
+    marker.className = `marker${state.activeCandidateNumber === candidate.number ? " active" : ""}${state.selectedIds.has(candidate.candidateId) ? "" : " unselected"}`;
     marker.textContent = String(candidate.number);
     marker.title = `${titleFor(candidate)}\n${addressFor(candidate)}`;
     const left = point.x - topLeft.x + (candidate.offsetX || 0);
@@ -231,8 +473,15 @@
     for (const candidate of state.candidates) {
       const item = document.createElement("li");
       item.id = `candidate-${candidate.number}`;
-      item.className = `candidate-row${candidate.geocodeFailed ? " failed" : ""}${state.activeCandidateNumber === candidate.number ? " active" : ""}`;
+      item.className = `candidate-row${candidate.geocodeFailed ? " failed" : ""}${state.activeCandidateNumber === candidate.number ? " active" : ""}${state.selectedIds.has(candidate.candidateId) ? "" : " unselected"}`;
       item.addEventListener("click", () => selectCandidate(candidate.number));
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = state.selectedIds.has(candidate.candidateId);
+      checkbox.setAttribute("aria-label", `Select candidate ${candidate.number}`);
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", () => toggleCandidate(candidate.candidateId, checkbox.checked));
 
       const number = document.createElement("div");
       number.className = "candidate-number";
@@ -255,9 +504,10 @@
         body.appendChild(note);
       }
 
-      item.append(number, body);
+      item.append(checkbox, number, body);
       els.list.appendChild(item);
     }
+    updateSelectionCount();
   }
 
   function offsetDuplicateCoordinates() {
@@ -344,9 +594,13 @@
   }
 
   async function loadCandidates() {
-    const result = await chrome.storage.local.get("mapCandidates");
+    const result = await chrome.storage.local.get(["mapCandidates", "mapSelectedCandidateIds", "mapSourceTabId", "mapCanUseDetails"]);
     const candidates = Array.isArray(result.mapCandidates) ? result.mapCandidates : [];
     state.candidates = candidates.map((candidate, index) => Object.assign({}, candidate, { number: candidate.displayNumber || index + 1 }));
+    const initialSelection = Array.isArray(result.mapSelectedCandidateIds) ? result.mapSelectedCandidateIds : state.candidates.map((candidate) => candidate.candidateId);
+    state.selectedIds = new Set(initialSelection.filter((id) => state.candidates.some((candidate) => candidate.candidateId === id)));
+    state.sourceTabId = result.mapSourceTabId || null;
+    state.canUseDetails = Boolean(result.mapCanUseDetails);
     state.localityHint = inferLocality();
   }
 
@@ -373,6 +627,29 @@
   }
 
   function wireInteractions() {
+    els.extractBtn.addEventListener("click", () => extractSelected("basic"));
+    els.detailBtn.addEventListener("click", () => extractSelected("details"));
+    els.saveBtn.addEventListener("click", saveRows);
+    els.showSavedBtn.addEventListener("click", showSavedRows);
+    els.copyBtn.addEventListener("click", copyRows);
+    els.jsonBtn.addEventListener("click", copyJson);
+    els.clearBtn.addEventListener("click", clearSavedRows);
+    els.selectAllBtn.addEventListener("click", async () => {
+      state.selectedIds = new Set(state.candidates.map((candidate) => candidate.candidateId));
+      state.rows = [];
+      renderRows();
+      await persistSelection();
+      renderMap();
+      renderList();
+    });
+    els.selectNoneBtn.addEventListener("click", async () => {
+      state.selectedIds = new Set();
+      state.rows = [];
+      renderRows();
+      await persistSelection();
+      renderMap();
+      renderList();
+    });
     els.fitBtn.addEventListener("click", fitBounds);
     els.zoomInBtn.addEventListener("click", () => zoomBy(1));
     els.zoomOutBtn.addEventListener("click", () => zoomBy(-1));
@@ -413,13 +690,23 @@
 
   document.addEventListener("DOMContentLoaded", async () => {
     wireInteractions();
+    await refreshSavedCount();
     await loadCandidates();
     renderList();
     renderMap();
+    renderRows();
+    setBusy(false);
     if (!state.candidates.length) {
       setStatus("No candidates were sent to the map.", true);
       return;
     }
     await geocodeAll();
+  });
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "EXTRACT_PROGRESS") return;
+    const total = message.total || 0;
+    const current = message.current || 0;
+    setStatus(`Details ${current}/${total}: ${message.label || message.url || ""}`);
   });
 })();
