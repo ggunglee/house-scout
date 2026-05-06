@@ -489,13 +489,9 @@
         if (!response || !response.ok) throw new Error(response && response.error ? response.error : "선택 항목 추출 실패");
         state.rows = normalizeRowsForOutput(RC.dedupeRows ? RC.dedupeRows(response.rows || []) : (response.rows || []));
       }
-      if (mode === "details") {
-        state.rows = await addWalkTimesToRows(state.rows);
-      }
+      state.rows = await addWalkTimesToRows(state.rows);
       renderRows();
-      setStatus(mode === "details"
-        ? `${state.rows.length}개 선택 결과와 보행 시간을 추출했습니다.`
-        : `${state.rows.length}개 선택 결과를 추출했습니다.`);
+      setStatus(`${state.rows.length}개 선택 결과와 보행 시간을 추출했습니다.`);
     } catch (error) {
       setStatus(error.message || String(error), true);
     } finally {

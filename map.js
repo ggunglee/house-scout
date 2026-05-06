@@ -242,18 +242,15 @@
       if (!response || !response.ok) throw new Error(response && response.error ? response.error : "Extraction failed.");
       const rows = RC.dedupeRows ? RC.dedupeRows(response.rows || []) : (response.rows || []);
       state.rows = normalizeRowsForOutput(mergeRowsWithSelection(rows));
-      if (mode === "details") {
-        state.rows = await addWalkTimesToRows(state.rows);
-      }
+      state.rows = await addWalkTimesToRows(state.rows);
       renderRows();
-      setStatus(mode === "details"
-        ? `Extracted ${state.rows.length} rows with walk times. You can save them or copy the table from this map tab.`
-        : `Extracted ${state.rows.length} rows. You can save them or copy the table from this map tab.`);
+      setStatus(`Extracted ${state.rows.length} rows with walk times. You can save them or copy the table from this map tab.`);
     } catch (error) {
       if (mode === "basic") {
         state.rows = normalizeRowsForOutput(fallbackRowsFromSelection());
+        state.rows = await addWalkTimesToRows(state.rows);
         renderRows();
-        setStatus(`Used the selected map candidates as ${state.rows.length} rows because the original tab could not be reached.`);
+        setStatus(`Used the selected map candidates as ${state.rows.length} rows with walk times because the original tab could not be reached.`);
       } else {
         setStatus(error.message || String(error), true);
       }
