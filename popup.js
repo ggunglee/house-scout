@@ -174,6 +174,8 @@
     const match = text.match(/^(.+),\s*([A-Za-z .'-]+),\s*([A-Z]{2})(?:\s+\d{5})?\b/);
     if (!match) return text;
     let street = match[1]
+      .replace(/\s*,\s*(?:apt|apartment|unit|suite|ste|floor|fl|#)\.?\s*#?\s*[A-Za-z0-9-]+.*$/i, "")
+      .replace(/\s*,\s*#?\s*[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/i, "")
       .replace(/\s+-\s*Unit\s+[A-Za-z0-9-]+.*$/i, "")
       .replace(/\s+-\s*(?:Apt|Apartment|Unit|Suite|Ste|Floor|Fl|#)\.?\s*[A-Za-z0-9-]+.*$/i, "")
       .replace(/\s+-\s*\d+\s+[A-Za-z0-9 .'-]+(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Drive|Dr\.?|Place|Pl\.?|Court|Ct\.?|Lane|Ln\.?|Parkway|Pkwy|Boulevard|Blvd)\b.*$/i, "")
@@ -242,6 +244,44 @@
     return mins ? `${hours} hr ${mins} min` : `${hours} hr`;
   }
 
+  async function addWalkTimesToRows(rows) {
+    if (!rows.length) {
+      return rows;
+    }
+
+    els.progressBar.hidden = false;
+    els.progressBar.value = 0;
+    const cache = new Map();
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const key = cleanAddressForGeocode(row.address);
+      setStatus(`보행 시간 계산 중 ${index + 1}/${rows.length}: ${key || row.name || ""}`);
+      if (!key) {
+        els.progressBar.value = Math.round(((index + 1) / rows.length) * 100);
+        continue;
+      }
+
+      let point = cache.get(key);
+      if (!point) {
+        point = await geocodeAddress(key);
+        cache.set(key, point || false);
+        if (index < rows.length - 1) await sleep(1100);
+      } else if (point === false) {
+        point = null;
+      }
+
+      if (point) {
+        for (const origin of WALK_ORIGINS) {
+          const minutes = estimatedWalkMinutes(origin, point);
+          row[`${origin.key}Minutes`] = minutes;
+          row[origin.key] = walkTimeText(minutes);
+        }
+      }
+      els.progressBar.value = Math.round(((index + 1) / rows.length) * 100);
+    }
+    return rows;
+  }
+
   async function calculateWalkTimes() {
     const rows = await exportRows();
     if (!rows.length) {
@@ -250,40 +290,13 @@
     }
 
     setBusy(true);
-    els.progressBar.hidden = false;
-    els.progressBar.value = 0;
-    const cache = new Map();
     try {
-      for (let index = 0; index < rows.length; index += 1) {
-        const row = rows[index];
-        const key = cleanAddressForGeocode(row.address);
-        setStatus(`보행 시간 계산 중 ${index + 1}/${rows.length}: ${key || row.name || ""}`);
-        if (!key) continue;
-
-        let point = cache.get(key);
-        if (!point) {
-          point = await geocodeAddress(key);
-          cache.set(key, point || false);
-          if (index < rows.length - 1) await sleep(1100);
-        } else if (point === false) {
-          point = null;
-        }
-
-        if (point) {
-          for (const origin of WALK_ORIGINS) {
-            const minutes = estimatedWalkMinutes(origin, point);
-            row[`${origin.key}Minutes`] = minutes;
-            row[origin.key] = walkTimeText(minutes);
-          }
-        }
-        els.progressBar.value = Math.round(((index + 1) / rows.length) * 100);
-      }
-      state.rows = rows;
+      state.rows = await addWalkTimesToRows(rows);
       renderRows();
-      const saved = await RC.saveRows(rows);
+      const saved = await RC.saveRows(state.rows);
       state.savedRowsCount = saved.length;
       els.savedCount.textContent = `저장 ${saved.length}개`;
-      setStatus(`${rows.length}개 행의 From Jackson / From PWG 시간을 계산했습니다.`);
+      setStatus(`${state.rows.length}개 행의 From Jackson / From PWG 시간을 계산했습니다.`);
     } catch (error) {
       setStatus(error.message || String(error), true);
     } finally {
@@ -476,8 +489,13 @@
         if (!response || !response.ok) throw new Error(response && response.error ? response.error : "선택 항목 추출 실패");
         state.rows = normalizeRowsForOutput(RC.dedupeRows ? RC.dedupeRows(response.rows || []) : (response.rows || []));
       }
+      if (mode === "details") {
+        state.rows = await addWalkTimesToRows(state.rows);
+      }
       renderRows();
-      setStatus(`${state.rows.length}개 선택 결과를 추출했습니다.`);
+      setStatus(mode === "details"
+        ? `${state.rows.length}개 선택 결과와 보행 시간을 추출했습니다.`
+        : `${state.rows.length}개 선택 결과를 추출했습니다.`);
     } catch (error) {
       setStatus(error.message || String(error), true);
     } finally {

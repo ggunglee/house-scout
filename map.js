@@ -3,6 +3,20 @@
 
   const TILE_SIZE = 256;
   const DEFAULT_CENTER = { lat: 41.3083, lon: -72.9279 };
+  const WALK_ORIGINS = [
+    {
+      key: "fromJackson",
+      lat: 41.3154476,
+      lon: -72.9224020
+    },
+    {
+      key: "fromPWG",
+      lat: 41.3162704,
+      lon: -72.9301032
+    }
+  ];
+  const WALK_SPEED_KMH = 4.4;
+  const WALK_SIGNAL_BUFFER_MINUTES = 1.5;
   const LOCALITY_BOUNDS = {
     "new haven, ct": "-73.05,41.39,-72.83,41.22"
   };
@@ -83,6 +97,44 @@
     if (Array.isArray(value)) return value.join("; ");
     if (value == null || value === "") return "";
     return String(value);
+  }
+
+  function haversineKm(from, to) {
+    const radiusKm = 6371;
+    const dLat = (to.lat - from.lat) * Math.PI / 180;
+    const dLon = (to.lon - from.lon) * Math.PI / 180;
+    const lat1 = from.lat * Math.PI / 180;
+    const lat2 = to.lat * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return radiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function gridWalkKm(from, to) {
+    const radiusKm = 6371;
+    const lat1 = from.lat * Math.PI / 180;
+    const lat2 = to.lat * Math.PI / 180;
+    const dLat = Math.abs((to.lat - from.lat) * Math.PI / 180);
+    const dLon = Math.abs((to.lon - from.lon) * Math.PI / 180);
+    const northSouthKm = radiusKm * dLat;
+    const eastWestKm = radiusKm * Math.cos((lat1 + lat2) / 2) * dLon;
+    return northSouthKm + eastWestKm;
+  }
+
+  function estimatedWalkMinutes(from, to) {
+    const directKm = haversineKm(from, to);
+    const gridKm = gridWalkKm(from, to);
+    const routeKm = Math.max(directKm * 1.35, gridKm * 0.92);
+    const movingMinutes = (routeKm / WALK_SPEED_KMH) * 60;
+    const crossingBuffer = Math.min(4, Math.max(1, routeKm * WALK_SIGNAL_BUFFER_MINUTES));
+    return Math.round(movingMinutes + crossingBuffer);
+  }
+
+  function walkTimeText(minutes) {
+    if (!Number.isFinite(minutes)) return "";
+    if (minutes < 60) return `${Math.max(1, Math.round(minutes))} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+    return mins ? `${hours} hr ${mins} min` : `${hours} hr`;
   }
 
   function renderRows() {
@@ -190,8 +242,13 @@
       if (!response || !response.ok) throw new Error(response && response.error ? response.error : "Extraction failed.");
       const rows = RC.dedupeRows ? RC.dedupeRows(response.rows || []) : (response.rows || []);
       state.rows = normalizeRowsForOutput(mergeRowsWithSelection(rows));
+      if (mode === "details") {
+        state.rows = await addWalkTimesToRows(state.rows);
+      }
       renderRows();
-      setStatus(`Extracted ${state.rows.length} rows. You can save them or copy the table from this map tab.`);
+      setStatus(mode === "details"
+        ? `Extracted ${state.rows.length} rows with walk times. You can save them or copy the table from this map tab.`
+        : `Extracted ${state.rows.length} rows. You can save them or copy the table from this map tab.`);
     } catch (error) {
       if (mode === "basic") {
         state.rows = normalizeRowsForOutput(fallbackRowsFromSelection());
@@ -315,6 +372,8 @@
     const cityState = fullMatch ? `${fullMatch[2].trim()}, ${fullMatch[3].trim()}` : locality;
 
     street = street
+      .replace(/\s*,\s*(?:apt|apartment|unit|suite|ste|floor|fl|#)\.?\s*#?\s*[A-Za-z0-9-]+.*$/i, "")
+      .replace(/\s*,\s*#?\s*[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/i, "")
       .replace(/^(\d+)\s*-\s*\d+(\s+)/, "$1$2")
       .replace(/\s+-\s*(?:apt|apartment|unit|suite|ste|floor|fl|#)?\s*[A-Za-z0-9-]+$/i, "")
       .replace(/\s+#\s*[A-Za-z0-9-]+$/i, "")
@@ -343,6 +402,45 @@
     if (!response.ok) return null;
     const data = await response.json();
     return data && data[0] ? data[0] : null;
+  }
+
+  async function pointForRow(row, cache) {
+    const lat = asNumber(row.lat || row.latitude);
+    const lon = asNumber(row.lon || row.lng || row.longitude);
+    if (lat != null && lon != null) return { lat, lon };
+
+    const query = streetQueryFromAddress(row.address || row.location, state.localityHint);
+    if (!query) return null;
+
+    if (cache.has(query)) {
+      const cached = cache.get(query);
+      return cached === false ? null : cached;
+    }
+
+    const first = await searchAddress(query);
+    const foundLat = first ? asNumber(first.lat) : null;
+    const foundLon = first ? asNumber(first.lon) : null;
+    const point = foundLat != null && foundLon != null ? { lat: foundLat, lon: foundLon } : null;
+    cache.set(query, point || false);
+    return point;
+  }
+
+  async function addWalkTimesToRows(rows) {
+    const cache = new Map();
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      setStatus(`Calculating walk time ${index + 1}/${rows.length}: ${streetQueryFromAddress(row.address || row.location, state.localityHint) || row.name || ""}`);
+      const point = await pointForRow(row, cache);
+      if (point) {
+        for (const origin of WALK_ORIGINS) {
+          const minutes = estimatedWalkMinutes(origin, point);
+          row[`${origin.key}Minutes`] = minutes;
+          row[origin.key] = walkTimeText(minutes);
+        }
+      }
+      if (index < rows.length - 1) await new Promise((resolve) => setTimeout(resolve, 1100));
+    }
+    return rows;
   }
 
   function worldSize(zoom) {
