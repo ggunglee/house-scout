@@ -26,6 +26,7 @@
 
   const SHEET_COLUMNS = [
     { key: "name", label: "이름" },
+    { key: "address", label: "주소" },
     { key: "area", label: "면적" },
     { key: "rent", label: "월세" },
     { key: "utilities", label: "유틸리티 포함(전기 제외)" },
@@ -141,6 +142,7 @@
     const laundry = laundryStatus(row);
     return {
       name: compact(row.name || row.title || row.address),
+      address: compact(row.address || row.location),
       area: areaText(row),
       rent: rentText(row),
       utilities: utilitiesText(row),

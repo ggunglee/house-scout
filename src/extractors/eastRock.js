@@ -27,6 +27,17 @@
     return (base && base.href) || (doc && doc.baseURI && doc.baseURI !== "about:blank" ? doc.baseURI : location.href);
   }
 
+  function addressFromCard(card) {
+    return RC.textFromSelectors(card, [
+      ".js-listing-address",
+      ".listing-item__address",
+      ".listing-address",
+      "[itemprop='address']",
+      "address",
+      "[class*='address']"
+    ]);
+  }
+
   function extractEastRockListings(doc) {
     const items = Array.from(doc.querySelectorAll(".js-listing-item"));
     const baseUrl = baseUrlFor(doc);
@@ -35,7 +46,7 @@
       const titleLink = card.querySelector(".js-listing-title a") || card.querySelector(".js-link-to-detail") || card.querySelector("a[href]");
       const title = RC.cleanText(titleLink && titleLink.textContent) || RC.textFromSelectors(card, [".js-listing-title"]);
       const detailUrl = RC.absolutizeUrl(titleLink && titleLink.getAttribute("href"), baseUrl);
-      const address = RC.textFromSelectors(card, [".js-listing-address"]);
+      const address = addressFromCard(card);
       const rentText = valueFor(pairs, ["rent"]);
       const sqftText = valueFor(pairs, ["square", "sq"]);
       const bedBathText = valueFor(pairs, ["bed", "bath"]) || RC.cleanText(card.textContent);

@@ -17,7 +17,7 @@ Chrome Manifest V3 extension for collecting apartment listings, saving shortlist
 
 The one-click copy format uses tab-separated columns:
 
-`이름, 면적, 월세, 유틸리티 포함(전기 제외), 세탁기, 잭슨 거리, 특징`
+`이름, 주소, 면적, 월세, 유틸리티 포함(전기 제외), 세탁기, 잭슨 거리, 특징`
 
 Laundry is normalized as:
 

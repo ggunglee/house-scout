@@ -296,14 +296,14 @@
     els.rowCount.textContent = `결과 ${state.rows.length}개`;
     const sheetRows = RC.rowsToSheetRows ? RC.rowsToSheetRows(state.rows) : state.rows;
     if (!state.rows.length) {
-      els.resultsBody.innerHTML = '<tr><td colspan="8" class="empty">아직 표시할 결과가 없습니다.</td></tr>';
+      els.resultsBody.innerHTML = '<tr><td colspan="9" class="empty">아직 표시할 결과가 없습니다.</td></tr>';
       setBusy(false);
       return;
     }
     els.resultsBody.textContent = "";
     for (const row of sheetRows) {
       const tr = document.createElement("tr");
-      [row.name, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features, row.details]
+      [row.name, row.address, row.area, row.rent, row.utilities, row.laundry, row.fromJackson, row.features, row.details]
         .forEach((value) => {
           const td = document.createElement("td");
           td.textContent = formatValue(value);
